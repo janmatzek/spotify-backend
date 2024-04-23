@@ -12,6 +12,9 @@ app = FastAPI()
 
 origins = [
     "http://localhost:3000",
+    "https://spotify-front-end-one.vercel.app",
+    "https://spotify-front-i6799bfpl-janmatzeks-projects.vercel.app",
+    "https://spotify-front-end-git-master-janmatzeks-projects.vercel.app"
 ]
 
 # Add CORS middleware to your FastAPI app
@@ -55,7 +58,7 @@ async def fetch_scorecards_data(period: str):
 
     data = parse_query_result(query_result)
 
-    return Response(content=json.dumps(data[0]), status_code=200)
+    return Response(content=json.dumps(data[0]), status_code=200, headers={"Content-Type": "application/json"})
 
 
 @app.get("/bars/{period}")
@@ -108,7 +111,7 @@ async def fetch_bars_data(period: str):
     
     processed_data = [{"hour": item["hour_played_at"], "count": item["track_count"]} for item in data]
 
-    return Response(content=json.dumps(processed_data), status_code=200)
+    return Response(content=json.dumps(processed_data), status_code=200, headers={"Content-Type": "application/json"})
 
 # left doughnut chart 
 @app.get("/pie_context/{period}")
@@ -142,7 +145,7 @@ async def fetch_context_pie_data(period: str):
 
     data = parse_query_result(query_result)
 
-    return Response(content=json.dumps(data), status_code=200)
+    return Response(content=json.dumps(data), status_code=200, headers={"Content-Type": "application/json"})
 
 # middle doughnut chart
 @app.get("/pie_artists/{period}")
@@ -177,7 +180,7 @@ async def fetch_artists_pie_data(period: str):
 
     data = parse_query_result(query_result)
 
-    return Response(content=json.dumps(data), status_code=200)
+    return Response(content=json.dumps(data), status_code=200, headers={"Content-Type": "application/json"})
 
 # right doughnut chart
 @app.get("/pie_release_years/{period}")
@@ -212,11 +215,12 @@ async def fetch_release_pie_data(period: str):
 
     data = parse_query_result(query_result)
 
-    return Response(content=json.dumps(data), status_code=200)
+    return Response(content=json.dumps(data), status_code=200, headers={"Content-Type": "application/json"})
 
 # the data table
 @app.get("/table/{period}")
 async def fetch_table_data(period: str):
+    print('Processing...')
     if period == 'last_24':
         queried_table = os.getenv("TABLE_ID_24")
     elif period == "all_time":
@@ -256,4 +260,6 @@ async def fetch_table_data(period: str):
 
     data = parse_query_result(query_result)
 
-    return Response(content=json.dumps(data), status_code=200)
+    print(data)
+    print('sending response')
+    return Response(content=json.dumps(data), status_code=200, headers={"Content-Type": "application/json"})
