@@ -91,8 +91,8 @@ async def fetch_bars_data(period: str):
 
         """
     elif period == "all_time":
-        queried_table = os.getenv("TABLE_ID_FULL")
-        str_query = """""" # ! add the query
+        queried_table = os.getenv("TABLE_ID_AVG_HOURS")
+        str_query = f"SELECT * FROM {queried_table}"
     else:
         raise HTTPException(status_code=400, detail="Invalid period")
 
@@ -130,6 +130,7 @@ async def fetch_context_pie_data(period: str):
             {queried_table}
         GROUP BY
             context_type
+        ORDER BY count(track_id) DESC
     """
 
     try:
@@ -158,14 +159,16 @@ async def fetch_artists_pie_data(period: str):
         raise HTTPException(status_code=400, detail="Invalid period")
     
     str_query = f"""
-        SELECT
-            STRING_AGG(DISTINCT track_artists_name) as category,
-            COUNT(track_id) as value
-        FROM
-            {queried_table}
-        GROUP BY
-            track_artists_id
-    """
+            SELECT
+                STRING_AGG(DISTINCT track_artists_name) as category,
+                COUNT(track_id) as value
+            FROM
+                {queried_table}
+            GROUP BY
+                track_artists_id
+            ORDER BY COUNT(track_id) DESC
+            LIMIT 20
+        """
 
     try:
         big_query_client = bigquery.Client(project=os.getenv("GCP_PROJECT_ID"), credentials=service_account.Credentials.from_service_account_file(os.getenv("SERVICE_ACCOUNT_PATH")))
@@ -194,12 +197,14 @@ async def fetch_release_pie_data(period: str):
     
     str_query = f"""
         SELECT
-            SPLIT(track_album_release_date, '-')[OFFSET(0)] AS category,
+            CONCAT(SUBSTR(SPLIT(track_album_release_date, '-')[OFFSET(0)], 1, 3), '0s') AS category,
             COUNT(track_id) AS value
         FROM
             {queried_table}
         GROUP BY
             category
+        ORDER BY COUNT(track_id) DESC
+
     """
 
     try:
@@ -220,7 +225,6 @@ async def fetch_release_pie_data(period: str):
 # the data table
 @app.get("/table/{period}")
 async def fetch_table_data(period: str):
-    print('Processing...')
     if period == 'last_24':
         queried_table = os.getenv("TABLE_ID_24")
     elif period == "all_time":
@@ -260,6 +264,4 @@ async def fetch_table_data(period: str):
 
     data = parse_query_result(query_result)
 
-    print(data)
-    print('sending response')
     return Response(content=json.dumps(data), status_code=200, headers={"Content-Type": "application/json"})
