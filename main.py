@@ -1,11 +1,14 @@
+""" fastAPI backend for Jan's Spotify Dashboard web application """
+
+import json
+import os
+
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
-from google.cloud import bigquery
-from google.oauth2 import service_account
-from dotenv import load_dotenv
-from utils import *
-import os
-import json
+
+from utils import parse_query_result, run_query, setup_big_query_client
+
 load_dotenv()
 
 app = FastAPI()
@@ -14,7 +17,7 @@ origins = [
     "http://localhost:3000",
     "https://spotify-front-end-one.vercel.app",
     "https://spotify-front-i6799bfpl-janmatzeks-projects.vercel.app",
-    "https://spotify-front-end-git-master-janmatzeks-projects.vercel.app"
+    "https://spotify-front-end-git-master-janmatzeks-projects.vercel.app",
 ]
 
 # Add CORS middleware to your FastAPI app
@@ -26,15 +29,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.get("/scorecards/{period}")
 async def fetch_scorecards_data(period: str):
-    if period == 'last_24':
+    """data for scorecards - last 24 hours or all-time"""
+    if period == "last_24":
         queried_table = os.getenv("TABLE_ID_24")
     elif period == "all_time":
         queried_table = os.getenv("TABLE_ID_FULL")
     else:
         raise HTTPException(status_code=400, detail="Invalid period")
-    
+
     str_query = f"""
         SELECT 
             COUNT(track_id) AS count_tracks,
@@ -45,25 +50,30 @@ async def fetch_scorecards_data(period: str):
         from {queried_table}
     """
 
-    try:
-        big_query_client = bigquery.Client(project=os.getenv("GCP_PROJECT_ID"), credentials=service_account.Credentials.from_service_account_file(os.getenv("SERVICE_ACCOUNT_PATH")))
-    except Exception as e:
-        send_response(500, "Could not create BigQuery client", e)
+    project_id = os.getenv("GCP_PROJECT_ID")
+    service_account_path = os.getenv("SERVICE_ACCOUNT_PATH")
 
-    try:
-        query_job = big_query_client.query(query = str_query)
-        query_result = query_job.result()
-    except Exception as e:
-        send_response(500, "Unable to execute the query", e)
+    client_status, big_query_client = setup_big_query_client(project_id, service_account_path)
+    if client_status["status_code"] != 200:
+        return client_status
+
+    query_status, query_result = run_query(big_query_client, str_query)
+    if query_status["status_code"] != 200:
+        return query_status
 
     data = parse_query_result(query_result)
 
-    return Response(content=json.dumps(data[0]), status_code=200, headers={"Content-Type": "application/json"})
+    return Response(
+        content=json.dumps(data[0]),
+        status_code=200,
+        headers={"Content-Type": "application/json"},
+    )
 
 
 @app.get("/bars/{period}")
 async def fetch_bars_data(period: str):
-    if period == 'last_24':
+    """data for bar chart - last 24 hours or all-time average"""
+    if period == "last_24":
         queried_table = os.getenv("TABLE_ID_24")
         str_query = f"""
             WITH hours AS (
@@ -96,33 +106,40 @@ async def fetch_bars_data(period: str):
     else:
         raise HTTPException(status_code=400, detail="Invalid period")
 
-    try:
-        big_query_client = bigquery.Client(project=os.getenv("GCP_PROJECT_ID"), credentials=service_account.Credentials.from_service_account_file(os.getenv("SERVICE_ACCOUNT_PATH")))
-    except Exception as e:
-        send_response(500, "Could not create BigQuery client", e)
+    project_id = os.getenv("GCP_PROJECT_ID")
+    service_account_path = os.getenv("SERVICE_ACCOUNT_PATH")
 
-    try:
-        query_job = big_query_client.query(query = str_query)
-        query_result = query_job.result()
-    except Exception as e:
-        send_response(500, "Unable to execute the query", e)
+    client_status, big_query_client = setup_big_query_client(project_id, service_account_path)
+    if client_status["status_code"] != 200:
+        return client_status
+
+    query_status, query_result = run_query(big_query_client, str_query)
+    if query_status["status_code"] != 200:
+        return query_status
 
     data = parse_query_result(query_result)
-    
-    processed_data = [{"hour": item["hour_played_at"], "count": item["track_count"]} for item in data]
 
-    return Response(content=json.dumps(processed_data), status_code=200, headers={"Content-Type": "application/json"})
+    processed_data = [
+        {"hour": item["hour_played_at"], "count": item["track_count"]} for item in data
+    ]
 
-# left doughnut chart 
+    return Response(
+        content=json.dumps(processed_data),
+        status_code=200,
+        headers={"Content-Type": "application/json"},
+    )
+
+
 @app.get("/pie_context/{period}")
 async def fetch_context_pie_data(period: str):
-    if period == 'last_24':
+    """data for track context doughnut chart - last 24 hours or all-time"""
+    if period == "last_24":
         queried_table = os.getenv("TABLE_ID_24")
     elif period == "all_time":
         queried_table = os.getenv("TABLE_ID_FULL")
     else:
         raise HTTPException(status_code=400, detail="Invalid period")
-    
+
     str_query = f"""
         SELECT
             context_type AS category, count(track_id) AS value
@@ -133,31 +150,36 @@ async def fetch_context_pie_data(period: str):
         ORDER BY count(track_id) DESC
     """
 
-    try:
-        big_query_client = bigquery.Client(project=os.getenv("GCP_PROJECT_ID"), credentials=service_account.Credentials.from_service_account_file(os.getenv("SERVICE_ACCOUNT_PATH")))
-    except Exception as e:
-        send_response(500, "Could not create BigQuery client", e)
+    project_id = os.getenv("GCP_PROJECT_ID")
+    service_account_path = os.getenv("SERVICE_ACCOUNT_PATH")
 
-    try:
-        query_job = big_query_client.query(query = str_query)
-        query_result = query_job.result()
-    except Exception as e:
-        send_response(500, "Unable to execute the query", e)
+    client_status, big_query_client = setup_big_query_client(project_id, service_account_path)
+    if client_status["status_code"] != 200:
+        return client_status
+
+    query_status, query_result = run_query(big_query_client, str_query)
+    if query_status["status_code"] != 200:
+        return query_status
 
     data = parse_query_result(query_result)
 
-    return Response(content=json.dumps(data), status_code=200, headers={"Content-Type": "application/json"})
+    return Response(
+        content=json.dumps(data),
+        status_code=200,
+        headers={"Content-Type": "application/json"},
+    )
 
-# middle doughnut chart
+
 @app.get("/pie_artists/{period}")
 async def fetch_artists_pie_data(period: str):
-    if period == 'last_24':
+    """data for artists doughnut chart - last 24 hours or all-time"""
+    if period == "last_24":
         queried_table = os.getenv("TABLE_ID_24")
     elif period == "all_time":
         queried_table = os.getenv("TABLE_ID_FULL")
     else:
         raise HTTPException(status_code=400, detail="Invalid period")
-    
+
     str_query = f"""
             SELECT
                 STRING_AGG(DISTINCT track_artists_name) as category,
@@ -170,31 +192,36 @@ async def fetch_artists_pie_data(period: str):
             LIMIT 20
         """
 
-    try:
-        big_query_client = bigquery.Client(project=os.getenv("GCP_PROJECT_ID"), credentials=service_account.Credentials.from_service_account_file(os.getenv("SERVICE_ACCOUNT_PATH")))
-    except Exception as e:
-        send_response(500, "Could not create BigQuery client", e)
+    project_id = os.getenv("GCP_PROJECT_ID")
+    service_account_path = os.getenv("SERVICE_ACCOUNT_PATH")
 
-    try:
-        query_job = big_query_client.query(query = str_query)
-        query_result = query_job.result()
-    except Exception as e:
-        send_response(500, "Unable to execute the query", e)
+    client_status, big_query_client = setup_big_query_client(project_id, service_account_path)
+    if client_status["status_code"] != 200:
+        return client_status
+
+    query_status, query_result = run_query(big_query_client, str_query)
+    if query_status["status_code"] != 200:
+        return query_status
 
     data = parse_query_result(query_result)
 
-    return Response(content=json.dumps(data), status_code=200, headers={"Content-Type": "application/json"})
+    return Response(
+        content=json.dumps(data),
+        status_code=200,
+        headers={"Content-Type": "application/json"},
+    )
 
-# right doughnut chart
+
 @app.get("/pie_release_years/{period}")
 async def fetch_release_pie_data(period: str):
-    if period == 'last_24':
+    """data for release decades doughnut chart - last 24 hours or all-time"""
+    if period == "last_24":
         queried_table = os.getenv("TABLE_ID_24")
     elif period == "all_time":
         queried_table = os.getenv("TABLE_ID_FULL")
     else:
         raise HTTPException(status_code=400, detail="Invalid period")
-    
+
     str_query = f"""
         SELECT
             CONCAT(SUBSTR(SPLIT(track_album_release_date, '-')[OFFSET(0)], 1, 3), '0s') AS category,
@@ -207,31 +234,36 @@ async def fetch_release_pie_data(period: str):
 
     """
 
-    try:
-        big_query_client = bigquery.Client(project=os.getenv("GCP_PROJECT_ID"), credentials=service_account.Credentials.from_service_account_file(os.getenv("SERVICE_ACCOUNT_PATH")))
-    except Exception as e:
-        send_response(500, "Could not create BigQuery client", e)
+    project_id = os.getenv("GCP_PROJECT_ID")
+    service_account_path = os.getenv("SERVICE_ACCOUNT_PATH")
 
-    try:
-        query_job = big_query_client.query(query = str_query)
-        query_result = query_job.result()
-    except Exception as e:
-        send_response(500, "Unable to execute the query", e)
+    client_status, big_query_client = setup_big_query_client(project_id, service_account_path)
+    if client_status["status_code"] != 200:
+        return client_status
+
+    query_status, query_result = run_query(big_query_client, str_query)
+    if query_status["status_code"] != 200:
+        return query_status
 
     data = parse_query_result(query_result)
 
-    return Response(content=json.dumps(data), status_code=200, headers={"Content-Type": "application/json"})
+    return Response(
+        content=json.dumps(data),
+        status_code=200,
+        headers={"Content-Type": "application/json"},
+    )
 
-# the data table
+
 @app.get("/table/{period}")
 async def fetch_table_data(period: str):
-    if period == 'last_24':
+    """data for the info table - last 24 hours or all-time"""
+    if period == "last_24":
         queried_table = os.getenv("TABLE_ID_24")
     elif period == "all_time":
         queried_table = os.getenv("TABLE_ID_FULL")
     else:
         raise HTTPException(status_code=400, detail="Invalid period")
-    
+
     str_query = f"""
         SELECT
             STRING_AGG(DISTINCT track_album_images_url) AS album_image_url,
@@ -251,17 +283,21 @@ async def fetch_table_data(period: str):
 
     """
 
-    try:
-        big_query_client = bigquery.Client(project=os.getenv("GCP_PROJECT_ID"), credentials=service_account.Credentials.from_service_account_file(os.getenv("SERVICE_ACCOUNT_PATH")))
-    except Exception as e:
-        send_response(500, "Could not create BigQuery client", e)
+    project_id = os.getenv("GCP_PROJECT_ID")
+    service_account_path = os.getenv("SERVICE_ACCOUNT_PATH")
 
-    try:
-        query_job = big_query_client.query(query = str_query)
-        query_result = query_job.result()
-    except Exception as e:
-        send_response(500, "Unable to execute the query", e)
+    client_status, big_query_client = setup_big_query_client(project_id, service_account_path)
+    if client_status["status_code"] != 200:
+        return client_status
+
+    query_status, query_result = run_query(big_query_client, str_query)
+    if query_status["status_code"] != 200:
+        return query_status
 
     data = parse_query_result(query_result)
 
-    return Response(content=json.dumps(data), status_code=200, headers={"Content-Type": "application/json"})
+    return Response(
+        content=json.dumps(data),
+        status_code=200,
+        headers={"Content-Type": "application/json"},
+    )
