@@ -22,6 +22,8 @@ functions:
       - http: GET /pie_release_years/{arg1}/
       - http: GET /pie_artists/{arg1}/
       - http: GET /table/{arg1}/
+      - http: GET /favorite_artists/
+      - http: GET /favorite_genres/
     layers:
       - Ref: PythonRequirementsLambdaLayer
 
