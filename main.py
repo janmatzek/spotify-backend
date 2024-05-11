@@ -25,7 +25,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -283,6 +283,67 @@ async def fetch_table_data(period: str):
 
     """
 
+    project_id = os.getenv("GCP_PROJECT_ID")
+    service_account_path = os.getenv("SERVICE_ACCOUNT_PATH")
+
+    client_status, big_query_client = setup_big_query_client(project_id, service_account_path)
+    if client_status["status_code"] != 200:
+        return client_status
+
+    query_status, query_result = run_query(big_query_client, str_query)
+    if query_status["status_code"] != 200:
+        return query_status
+
+    data = parse_query_result(query_result)
+
+    return Response(
+        content=json.dumps(data),
+        status_code=200,
+        headers={"Content-Type": "application/json"},
+    )
+
+
+@app.get("/favorite_artists")
+async def fetch_favorite_artists():
+    """select top 5 artists information from DB"""
+    queried_table = os.getenv("TABLE_ID_ARTISTS")
+    str_query = f"""
+        SELECT
+            name, main_genre, genres, popularity, images_url, external_urls_spotify, count_tracks 
+        FROM
+            {queried_table}
+    """
+    project_id = os.getenv("GCP_PROJECT_ID")
+    service_account_path = os.getenv("SERVICE_ACCOUNT_PATH")
+
+    client_status, big_query_client = setup_big_query_client(project_id, service_account_path)
+    if client_status["status_code"] != 200:
+        return client_status
+
+    query_status, query_result = run_query(big_query_client, str_query)
+    if query_status["status_code"] != 200:
+        return query_status
+
+    data = parse_query_result(query_result)
+
+    return Response(
+        content=json.dumps(data),
+        status_code=200,
+        headers={"Content-Type": "application/json"},
+    )
+
+
+@app.get("/favorite_genres")
+async def fetch_favorite_genres():
+    """Fetch top 20 genres from the DB"""
+    queried_table = os.getenv("TABLE_ID_GENRES")
+    str_query = f"""
+        SELECT
+            genre, count_tracks
+        FROM
+            {queried_table}
+        LIMIT 20
+    """
     project_id = os.getenv("GCP_PROJECT_ID")
     service_account_path = os.getenv("SERVICE_ACCOUNT_PATH")
 
